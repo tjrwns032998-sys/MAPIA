@@ -70,7 +70,8 @@ begin
   return coalesce(ok, false);
 end;
 $$;
-revoke all on function public.acquire_lease(text, int) from public;
+revoke execute on function public.acquire_lease(text, int) from anon;
+revoke execute on function public.acquire_lease(text, int) from public;
 grant execute on function public.acquire_lease(text, int) to authenticated;
 
 -- 실시간 변경 알림 켜기
