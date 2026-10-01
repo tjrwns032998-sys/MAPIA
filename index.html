@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>월광 살롱</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Gowun+Dodum&family=Nanum+Myeongjo:wght@700;800&display=swap" rel="stylesheet">
 <style>
@@ -7,6 +12,7 @@
 body[data-ph="night"]{--bg:#0a0d17;--wood:#111522;--wood2:#171c2e;--line:#2e3752;--glow:#5a6fb82e}
 body[data-ph="over"]{--glow:#d0566a22}
 *{box-sizing:border-box}
+html{background:#110c0a}
 html,body{margin:0}
 body{background:radial-gradient(ellipse 80% 45% at 50% -8%,var(--glow),transparent 70%),var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;padding-block:18px 40px;padding-inline:16px;display:flex;justify-content:center;transition:background .8s}
 main{width:100%;max-width:1040px;min-width:0;display:flex;flex-direction:column;gap:14px}
@@ -107,7 +113,8 @@ tr.now td{background:#c9a45c1f;color:var(--brass);font-weight:700}
 .rl .ic{font-size:18px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-
+</head>
+<body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <symbol id="i-mafia" viewBox="0 0 64 64"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M10 42c0 5 10 9 22 9s22-4 22-9c0-3-4-5-8-6.5C44 26 40 12 32 12S20 26 18 35.5C14 37 10 39 10 42z"/><path d="M18.5 35.5c8 3 19 3 27 0"/><path d="M25 14.5c3 5 11 5 14 0"/></g></symbol>
 <symbol id="i-doctor" viewBox="0 0 64 64"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M26 10h12v16h16v12H38v16H26V38H10V26h16z"/></g></symbol>
@@ -143,6 +150,8 @@ tr.now td{background:#c9a45c1f;color:var(--brass);font-weight:700}
 <details class="pn" id="guide" open><summary>직업 도감</summary><div id="info"></div></details>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
 <script>
 /*PURE_START*/
 const MIN=4,MAX=12,NIGHT_MS=40000,DAY_MS=300000,VOTE_MS=30000,DEF_MS=30000,JUDGE_MS=20000;
@@ -215,35 +224,70 @@ const PH={lobby:['i-candle','대기실','모두 모이면 준비 완료를 눌�
 const BNAMES=['말론','루시아','빈센트','카밀라','엔조','로사','가브리','미아','루카','소피아','토니','엘레나'];
 const KIND={mafia:'kill',doctor:'heal',police:'probe'};
 
-let S=null,R=null,SEC=null,PL={},ACT={},BOTS=[],CHAT=[],prof={},online=null,uid=null,db=null,room=null,mode='init';
+let S=null,R=null,SEC=null,PL={},ACT={},BOTS=[],CHAT=[],prof={},online=null,uid=null,db=null,sb=null,chatCh=null,mode='init';
 let seenGid=null,chatKey=null,chatUnsub=null,isEng=false,lastAcq=0,eBusy=false,lastSeq=-1,chain=Promise.resolve(),rq=0,lastChatSig='';
 const isOn=id=>id===uid||online===null||online.has(id);
 const phase=()=>S?S.phase:'lobby';
 const isBot=id=>!!(S&&S.bots&&S.bots[id])||BOTS.some(b=>b.id===id);
 function nm(id){if(S&&S.bots&&S.bots[id])return S.bots[id];const b=BOTS.find(x=>x.id===id);if(b)return b.name;return(PL[id]&&PL[id].nick)||(prof[id]&&prof[id].name)||'플레이어'}
 function colorOf(id){if(prof[id]&&prof[id].color)return prof[id].color;let h=0;for(const ch of id)h=(h*31+ch.charCodeAt(0))%360;return`hsl(${h} 45% 62%)`}
-const use=n=>(window.claude&&window.claude.use)?window.claude.use(n):Promise.resolve(null);
 const fmt=ms=>{ms=Math.max(0,Math.ceil(ms/1000));return String(Math.floor(ms/60)).padStart(2,'0')+':'+String(ms%60).padStart(2,'0')};
-function w(fn){chain=chain.then(fn).catch(e=>{if(e&&e.code==='invalid_argument'){mode='watch';render()}});return chain}
+function w(fn){chain=chain.then(fn).catch(e=>{console.error(e);if(e&&e.code==='invalid_argument'){mode='watch';render()}});return chain}
 
-async function resolveNames(ids){
- const user=await use('user');if(!user)return;
- const all=[...new Set(uid?[...ids,uid]:ids)];if(!all.length)return;
- const ps=await user.profiles(all);
- all.forEach(id=>{if(ps[id])prof[id]={name:ps[id].name||'',color:ps[id].color}});render()}
+/* ---------- Supabase 연결 (저장소 어댑터) ---------- */
+const CFG=window.MAFIA_CONFIG||{};
+/*DB_START*/
+const deepMerge=(a,b)=>{const o={...a};for(const k in b){const v=b[k];o[k]=(v&&typeof v==='object'&&!Array.isArray(v)&&a&&a[k]&&typeof a[k]==='object'&&!Array.isArray(a[k]))?deepMerge(a[k],v):v}return o};
+function makeDb(sb){
+ const KV=new Map(),DL=new Map(),CL=[];let loaded=false;
+ const par=p=>p.slice(0,p.lastIndexOf('/')),leaf=p=>p.slice(p.lastIndexOf('/')+1);
+ const sd=p=>({exists:KV.has(p),id:leaf(p),data:()=>KV.get(p)});
+ const sc=pre=>{const docs=[];KV.forEach((v,p)=>{if(par(p)===pre)docs.push({id:leaf(p),data:()=>v})});return{docs}};
+ const notify=p=>{if(!loaded)return;(DL.get(p)||[]).slice().forEach(f=>f(sd(p)));CL.slice().forEach(c=>{if(c.pre===par(p))c.fn(sc(c.pre))})};
+ const apply=(p,d)=>{if(d==null)KV.delete(p);else KV.set(p,d);notify(p)};
+ return{
+  async start(){
+   const ch=sb.channel('kv-changes').on('postgres_changes',{event:'*',schema:'public',table:'kv'},pl=>{if(pl.eventType==='DELETE')apply(pl.old.path,null);else apply(pl.new.path,pl.new.data)});
+   await new Promise(res=>{const t=setTimeout(res,8000);ch.subscribe(st=>{if(st==='SUBSCRIBED'){clearTimeout(t);res()}})});
+   const r=await sb.from('kv').select('path,data');if(r.error)throw r.error;
+   r.data.forEach(x=>KV.set(x.path,x.data));loaded=true;
+   DL.forEach((fs,p)=>fs.slice().forEach(f=>f(sd(p))));CL.slice().forEach(c=>c.fn(sc(c.pre)))},
+  doc(p){const ref={
+   async get(){const r=await sb.from('kv').select('data').eq('path',p).maybeSingle();if(r.error)throw r.error;const d=r.data&&r.data.data;return{exists:!!d,id:leaf(p),data:()=>d}},
+   async set(d){const r=await sb.from('kv').upsert({path:p,data:d,updated_at:new Date().toISOString()});if(r.error)throw r.error;apply(p,d)},
+   async update(d){return ref.set(deepMerge(KV.get(p)||{},d))},
+   async acquire(o){const r=await sb.rpc('acquire_lease',{p_path:p,p_ttl:o.ttlMs});if(r.error)throw r.error;return{acquired:!!r.data}},
+   onSnapshot(fn){if(!DL.has(p))DL.set(p,[]);DL.get(p).push(fn);if(loaded)fn(sd(p));return()=>{DL.set(p,DL.get(p).filter(f=>f!==fn))}}};return ref},
+  collection(pre){return{onSnapshot(fn){const c={pre,fn};CL.push(c);if(loaded)fn(sc(pre));return()=>{const i=CL.indexOf(c);if(i>=0)CL.splice(i,1)}}}}}}
+/*DB_END*/
+
+function mergeChat(rows){const m=new Map(CHAT.map(x=>[x.id,x]));rows.forEach(x=>m.set(x.id,x));CHAT=[...m.values()].sort((a,b)=>a.t-b.t||a.id-b.id).slice(-100);render()}
+async function chatSubscribe(key){
+ if(chatCh){sb.removeChannel(chatCh);chatCh=null}
+ CHAT=[];
+ chatCh=sb.channel('chat-'+key).on('postgres_changes',{event:'INSERT',schema:'public',table:'chat',filter:'rk=eq.'+key},pl=>{if(chatKey===key)mergeChat([pl.new])}).subscribe();
+ const r=await sb.from('chat').select('id,uid,ch,text,t').eq('rk',key).order('t',{ascending:false}).limit(100);
+ if(chatKey===key&&r.data)mergeChat(r.data)}
 
 async function connect(){
  try{
-  db=await use('db');const user=await use('user');room=await use('room');
-  if(db&&user){uid=await user.id();const cw=await user.can('data.write');
-   if(uid){mode=cw===false?'watch':'play';subscribe();if(mode==='play')await join();resolveNames([])}}
-  if(room&&uid){room.presence({uid});room.onPeers(ch=>{online=new Set(ch.peers.filter(p=>p.by).map(p=>p.by));render()},()=>{})}
- }catch(e){}
+  if(!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY||/YOUR/.test(CFG.SUPABASE_URL))throw new Error('config.js에 Supabase 주소와 키를 넣어 주세요.');
+  sb=supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+  let s=(await sb.auth.getSession()).data.session;
+  if(!s){const r=await sb.auth.signInAnonymously();if(r.error)throw r.error;s=r.data.session}
+  uid=s.user.id;
+  db=makeDb(sb);await db.start();
+  mode='play';subscribe();await join();
+  const pc=sb.channel('mafia-room',{config:{presence:{key:uid}}});
+  pc.on('presence',{event:'sync'},()=>{online=new Set(Object.keys(pc.presenceState()));render()});
+  pc.subscribe(st=>{if(st==='SUBSCRIBED')pc.track({uid,t:Date.now()})});
+ }catch(e){console.error(e)}
  if(mode==='init')mode='solo';
  render()}
+
 function subscribe(){
  const er=()=>{};
- db.collection('players').onSnapshot(sn=>{PL={};sn.docs.forEach(d=>{PL[d.id]=d.data()});resolveNames(Object.keys(PL));render()},er);
+ db.collection('players').onSnapshot(sn=>{PL={};sn.docs.forEach(d=>{PL[d.id]=d.data()});render()},er);
  db.doc('game/state').onSnapshot(sn=>{S=sn.exists?sn.data():null;onState();render()},er);
  db.doc('game/roles').onSnapshot(sn=>{R=sn.exists?sn.data():null;render()},er);
  db.doc('game/secret').onSnapshot(sn=>{SEC=sn.exists?sn.data():null;render()},er);
@@ -251,12 +295,11 @@ function subscribe(){
  db.doc('lobby/bots').onSnapshot(sn=>{BOTS=sn.exists?(sn.data().list||[]):[];render()},er)}
 async function join(){
  const sn=await db.doc('players/'+uid).get();
- if(!sn.exists)await db.doc('players/'+uid).set({nick:'',ready:false,t:Date.now()})}
+ if(!sn.exists)await db.doc('players/'+uid).set({nick:'손님'+Math.floor(1000+Math.random()*9000),ready:false,t:Date.now()})}
 function onState(){
  if(S&&S.gid&&S.gid!==seenGid){seenGid=S.gid;if(PL[uid]&&PL[uid].ready)setReady(false)}
  const key=(S&&S.phase!=='lobby'&&S.gid)?S.gid:'lobby';
- if(key!==chatKey&&db){chatKey=key;if(chatUnsub)chatUnsub();CHAT=[];
-  chatUnsub=db.collection('chat/'+key+'/msgs').orderBy('t','desc').limit(100).onSnapshot(sn=>{CHAT=sn.docs.map(d=>d.data()).reverse();render()},()=>{})}}
+ if(key!==chatKey&&sb){chatKey=key;chatSubscribe(key)}}
 
 function setMine(p){const cur=PL[uid]||{nick:'',ready:false};PL[uid]={...cur,...p};const v=PL[uid];w(()=>db.doc('players/'+uid).set({nick:v.nick||'',ready:!!v.ready,t:Date.now()}));render()}
 const setReady=v=>setMine({ready:v});
@@ -332,7 +375,7 @@ $('chatform').addEventListener('submit',e=>{
  e.preventDefault();const ch=myChannel(),t=$('chatin').value.trim().slice(0,200);
  if(!ch||!t||!chatKey)return;
  $('chatin').value='';const key=chatKey;
- w(()=>db.collection('chat/'+key+'/msgs').add({uid,ch,text:t,t:Date.now()}))});
+ w(async()=>{const r=await sb.from('chat').insert({rk:key,uid,ch,text:t,t:Date.now()}).select().single();if(r.error)throw r.error;mergeChat([r.data])})});
 
 /* ---------- 클릭 ---------- */
 document.body.addEventListener('click',e=>{
@@ -410,7 +453,7 @@ function tgBtns(ids,sel,act){
 
 function drawMe(){
  const c=ctx(),ph=phase(),el=$('me');
- if(mode==='solo'){el.innerHTML='<h2>안내</h2><p class="sub">이 페이지는 공유된 아티팩트에서 열어야 여러 명이 함께 할 수 있어요.</p>';return}
+ if(mode==='solo'){el.innerHTML='<h2>안내</h2><p class="sub">서버에 연결하지 못했어요. 새로고침하거나 Supabase 설정(config.js)을 확인해 주세요.</p>';return}
  if(mode==='watch'){el.innerHTML='<h2>관전 중</h2><p class="sub">게임에 참여하려면 작성자에게 \'참여자\' 권한을 요청하세요. 지금은 대화와 진행을 지켜볼 수 있어요.</p>';return}
  if(!c.playing){
   const hs=lobbyHumans(),n=hs.length+BOTS.length,rdy=hs.filter(id=>PL[id]&&PL[id].ready).length,all=hs.length>0&&rdy===hs.length;
@@ -422,7 +465,7 @@ function drawMe(){
   <div class="row" style="margin-bottom:8px"><button class="${mineR?'sel':''}" data-a="ready">${mineR?'준비 취소':'준비 완료'}</button></div>
   <div class="row" style="margin-bottom:8px"><button data-a="addbot" ${n>=MAX?'disabled':''}>AI 참가자 추가</button><button data-a="rmbot" ${BOTS.length?'':'disabled'}>AI 제거</button></div>
   <button class="main" style="width:100%" data-a="start" ${ok?'':'disabled'}>게임 시작</button>
-  <p class="sub" style="margin-top:10px">친구 초대: 공유 메뉴에서 이메일을 추가하고 권한을 '참여자'로 두어야 같이 할 수 있어요.</p>`;return}
+  <p class="sub" style="margin-top:10px">이 페이지 주소를 친구에게 보내면 같이 할 수 있어요.</p>`;return}
  if(!c.inGame){el.innerHTML='<h2>관전 중</h2><p class="sub">진행 중인 게임에는 들어갈 수 없어요. 끝나면 로비에서 함께해요. 유령 채팅은 사용할 수 있어요.</p>';return}
  const r=c.myRole,rm=r&&ROLE[r];
  let h='';
@@ -489,7 +532,7 @@ let infoSig='';
 function draw(){
  const nt=$('notice');
  if(mode==='init'){nt.hidden=false;nt.textContent='접속 중…'}
- else if(mode==='solo'){nt.hidden=false;nt.textContent='공유된 링크에서 열어야 다 함께 플레이할 수 있어요.'}
+ else if(mode==='solo'){nt.hidden=false;nt.textContent='서버에 연결하지 못했어요. 새로고침하거나 Supabase 설정(config.js)을 확인해 주세요.'}
  else if(mode==='watch'){nt.hidden=false;nt.textContent='관전 모드예요. 참여하려면 작성자에게 \'참여자\' 권한을 요청하세요.'}
  else{nt.hidden=false;const hs=lobbyHumans().length;nt.textContent=`실시간 연결됨 · 지금 ${online?Math.max(online.size,1):hs}명 접속 중`}
  if(mode==='play'&&document.activeElement!==$('nick'))$('nick').value=(PL[uid]&&PL[uid].nick)||'';
@@ -500,3 +543,5 @@ function draw(){
  if(S&&S.phase!=='lobby')$('guide').open=$('guide').open}
 drawInfo();draw();connect();
 </script>
+</body>
+</html>
