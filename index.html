@@ -27,6 +27,7 @@
 <symbol id="i-book" viewBox="0 0 64 64"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 12h30a6 6 0 0 1 6 6v36H20a6 6 0 0 1-6-6z"/><path d="M20 54V12M28 22h14M28 30h14"/></g></symbol>
 <symbol id="i-door" viewBox="0 0 64 64"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8h28v48H16z"/><path d="M40 32v.5M50 24l8 8-8 8M58 32H44"/></g></symbol>
 <symbol id="i-link" viewBox="0 0 64 64"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M26 38a10 10 0 0 0 14 0l8-8a10 10 0 0 0-14-14l-3 3"/><path d="M38 26a10 10 0 0 0-14 0l-8 8a10 10 0 0 0 14 14l3-3"/></g></symbol>
+<symbol id="i-spark" viewBox="0 0 64 64"><g fill="currentColor"><path d="M32 6l5 17 17 5-17 5-5 17-5-17-17-5 17-5z"/><circle cx="50" cy="48" r="4"/><circle cx="14" cy="46" r="3"/></g></symbol>
 </defs></svg>
 
 <header class="top">
@@ -34,6 +35,7 @@
 <div class="tools">
 <label id="nickbox" for="nick" hidden><input id="nick" maxlength="10" placeholder="닉네임" autocomplete="off" aria-label="닉네임"></label>
 <button id="btnCode" hidden title="초대 링크 복사"><svg class="ic"><use href="#i-link"/></svg><b class="chip-code" id="codeTxt"></b></button>
+<button id="btnToy" class="toy" title="심심할 때 눌러 보세요" aria-label="반딧불 장난감"><svg class="ic"><use href="#i-spark"/></svg><b id="toyN">0</b></button>
 <button id="btnSnd" title="배경음악"><svg class="ic" id="sndIc"><use href="#i-vol"/></svg><span>음악</span></button>
 <button id="btnGuide" title="직업 도감"><svg class="ic"><use href="#i-book"/></svg><span>도감</span></button>
 <button id="btnLeave" hidden title="방 나가기"><svg class="ic"><use href="#i-door"/></svg><span>나가기</span></button>
@@ -70,6 +72,9 @@
 </section>
 </div>
 
+<div id="decide" hidden></div>
+<canvas id="toyc" aria-hidden="true"></canvas>
+
 <div id="fx" aria-hidden="true"><div class="veil"></div><canvas id="fxc"></canvas><div class="fxcard" id="fxcard"></div></div>
 
 <dialog id="dlg"><div class="dlghead"><h2 style="margin:0">직업 도감</h2><button id="dlgClose">닫기</button></div><div id="info"></div><h2 style="margin-top:14px">진행 기록</h2><ol id="log" class="log"></ol></dialog>
@@ -82,5 +87,6 @@
 <script src="net.js"></script>
 <script src="fx.js"></script>
 <script src="ui.js"></script>
+<script src="toy.js"></script>
 </body>
 </html>

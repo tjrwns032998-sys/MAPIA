@@ -51,6 +51,7 @@ function drawStage(){
  $('stage').innerHTML=`<svg class="ic big"><use href="#${ic}"/></svg><div class="txt"><h2>${esc(t)}</h2><p>${s}</p>${res}</div>${timed?`<div class="clock"><b id="tm">--:--</b><div class="bar"><i id="bar"></i></div></div>`:''}`;
  tickUI()}
 function tickUI(){
+ const db2=$('dbar');if(db2&&S&&S.dur)db2.style.width=Math.max(0,Math.min(100,(S.endsAt-Date.now())/S.dur*100))+'%';
  const tm=$('tm');if(!tm||!S)return;
  const left=S.endsAt-Date.now();tm.textContent=fmt(left);
  const b=$('bar');if(b&&S.dur)b.style.width=Math.max(0,Math.min(100,left/S.dur*100))+'%'}
@@ -69,7 +70,7 @@ function seat(id,o){
  else tag=`<span class="tag">${isOn(id)||bot?'생존':'자리 비움'}</span>`;
  const vc=o.votes?`<span class="votes">${o.votes}표</span>`:'';
  const tg=S&&(S.phase==='defense'||S.phase==='judge')&&S.accused===id?' target':'';
- return`<div class="seat ${me?'me':''} ${o.dead?'dead':''} ${freshDead.has(id)?'fresh':''}${tg}">${bot?'<span class="ai">AI</span>':''}${vc}<div class="av" style="--c:${colorOf(id)}">${o.dead?ico('i-tomb'):esc(nm(id).trim().charAt(0)||'?')}</div><div class="who"><div class="nm">${esc(nm(id))}${me?' · 나':''}</div>${tag}</div></div>`}
+ return`<div class="seat ${me?'me':''} ${o.dead?'dead':''} ${freshDead.has(id)?'fresh':''}${tg}">${bot?'<span class="ai">AI</span>':''}${vc}<div class="av" style="--c:${colorOf(id)}">${o.dead?ico('i-tomb'):esc(nm(id).trim().charAt(0)||'?')}</div><div class="who"><div class="nm${nm(id).length>6?' long':''}">${esc(nm(id))}${me?' · 나':''}</div>${tag}</div></div>`}
 function drawSeats(){
  const c=ctx();let h='';
  if(!c.playing){
@@ -131,6 +132,43 @@ function drawMe(){
   else{const a=myAct('judge');h+=`<h2>${esc(nm(S.accused))} 님을 처형할까요?</h2><p class="sub">찬성이 투표자의 과반이면 처형돼요.</p><div class="cols2"><button class="danger ${a&&a.kind==='yes'?'sel':''}" data-a="yes">찬성 (처형)</button><button class="${a&&a.kind==='no'?'sel':''}" data-a="no">반대 (살려요)</button></div>`}}
  el.innerHTML=h}
 
+
+/* ---------- 행동 선택창: 밤 행동, 투표, 찬반 투표가 열리면 화면 가운데에 띄운다 ---------- */
+let decideClosed='',decideSig='',decideKey='';
+function pendingAct(){
+ const c=ctx(),ph=phase();
+ if(mode!=='play'||!c.inGame||c.dead||!S||!R||R.gid!==S.gid)return null;
+ const key=S.gid+':'+S.day+':'+ph,r=c.myRole,alive=c.alive;
+ if(ph==='night'&&r&&r!=='citizen'){
+  const a=myAct('night'),sel=a&&a.target,rm=ROLE[r];
+  const q={mafia:['오늘 밤, 누구를 노릴까요?','동료와 함께 정한 대상이 습격당해요.',alive.filter(id=>R.roles[id]!=='mafia')],doctor:['누구를 살릴까요?','마피아의 습격을 막아요. 자신도 고를 수 있어요.',alive],police:['누구를 조사할까요?','마피아인지 시민인지 알려 줘요.',alive.filter(id=>id!==uid)]}[r];
+  let extra='';
+  if(r==='mafia'){const v=S.order.filter(id=>R.roles[id]==='mafia'&&!S.dead.includes(id)&&!isBot(id)).map(id=>{const x=ACT[id];return x&&x.gid===S.gid&&x.n===S.day&&x.ph==='night'&&x.kind==='kill'?`${esc(nm(id))} → ${esc(nm(x.target))}`:null}).filter(Boolean);
+   if(v.length)extra=`<div class="chips" style="margin-bottom:8px">${v.map(x=>`<span class="chip">${x}</span>`).join('')}</div>`}
+  return{key,ic:rm.ic,rc:rm.c,title:q[0],sub:q[1],body:tgBtns(q[2],sel,'pick')+extra,done:!!sel,doneTxt:sel?`${esc(nm(sel))} 님을 선택했어요`:''}}
+ if(ph==='vote'){
+  const a=myAct('vote'),sel=a?(a.target||'none'):null;
+  return{key,ic:'i-ballot',rc:'var(--brass)',title:'누구를 처형할까요?',sub:'과반수 표를 얻으면 최후 발언 후 찬반 투표를 받아요.',
+   body:tgBtns(alive.filter(id=>id!==uid),sel,'vote')+`<button class="${sel==='none'?'sel':''}" style="width:100%" data-a="vote" data-v="">기권</button>`,done:!!a,doneTxt:a?(a.target?`${esc(nm(a.target))} 님에게 투표했어요`:'기권했어요'):''}}
+ if(ph==='judge'&&S.accused!==uid){
+  const a=myAct('judge');
+  return{key,ic:'i-gavel',rc:'var(--blood)',title:`${esc(nm(S.accused))} 님을 처형할까요?`,sub:'찬성이 투표자의 과반이면 처형돼요.',
+   body:`<div class="cols2"><button class="big2 danger ${a&&a.kind==='yes'?'sel':''}" data-a="yes">찬성 (처형)</button><button class="big2 ${a&&a.kind==='no'?'sel':''}" data-a="no">반대 (살려요)</button></div>`,done:!!a,doneTxt:a?(a.kind==='yes'?'찬성했어요':'반대했어요'):''}}
+ return null}
+function closeDecide(){const p=pendingAct();decideClosed=p?p.key:decideKey;drawDecide()}
+function drawDecide(){
+ const el=$('decide'),p=pendingAct();
+ $('me').classList.toggle('need',!!p&&!p.done&&decideClosed===p.key);
+ if(!p||decideClosed===p.key||fxBusy){if(!el.hidden){el.hidden=true;decideSig=''}return}
+ const sig=p.key+'|'+p.body+'|'+p.doneTxt;
+ if(sig===decideSig&&!el.hidden)return;decideSig=sig;
+ el.className=decideKey===p.key?'again':'';decideKey=p.key;
+ el.style.setProperty('--rc',p.rc);el.style.setProperty('--dglow',p.rc==='var(--blood)'?'#d0566a55':'#c9a45c55');
+ el.innerHTML=`<div class="dcard" role="dialog" aria-modal="true" aria-label="${esc(p.title)}"><button class="dx" data-a="dclose" aria-label="닫기">✕</button><div class="dhead">${ico(p.ic)}<div><h2>${p.title}</h2><p class="dsub">${p.sub}</p></div></div><div class="dclock"><i id="dbar"></i></div>${p.body}<p class="done">${p.doneTxt?'✓ '+p.doneTxt:''}</p><div class="dfoot"><span class="sub" style="font-size:12px">시간 안에는 바꿀 수 있어요</span><button data-a="dclose">${p.done?'확인':'나중에 고르기'}</button></div></div>`;
+ el.hidden=false;tickUI()}
+$('decide').addEventListener('pointerdown',e=>{if(e.target===$('decide'))closeDecide()});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('decide').hidden)closeDecide()});
+
 function drawChat(){
  const ch=myChannel(),inp=$('chatin'),ph=phase(),c=ctx();
  inp.disabled=!ch;$('chatgo').disabled=!ch;
@@ -174,13 +212,14 @@ function draw(){
  bgm();
  if(mode!=='play'){document.body.dataset.ph='lobby';return}
  fxTryRole();
- drawStage();drawSeats();drawMe();drawChat();drawSide();
+ drawStage();drawSeats();drawMe();drawChat();drawSide();drawDecide();
  if($('dlg').open){$('info').innerHTML=infoHtml();$('log').innerHTML=logHtml()}}
 
 /* ---------- 입력 ---------- */
 document.body.addEventListener('click',e=>{
  const b=e.target.closest('[data-a]');if(!b||b.disabled)return;
  const a=b.dataset.a,v=b.dataset.v;
+ if(a==='dclose'){closeDecide();return}
  if(a==='ready')setReady(!(PL[uid]&&PL[uid].ready));
  else if(a==='addbot')addBot(+v||1);else if(a==='rmbot')rmBot();else if(a==='rmall')rmBot(true);
  else if(a==='start')startGame();
@@ -189,7 +228,8 @@ document.body.addEventListener('click',e=>{
  else if(a==='vote')setAct({ph:'vote',kind:'vote',target:v||null});
  else if(a==='yes'||a==='no')setAct({ph:'judge',kind:a});
  else if(a==='done')setAct({ph:'defense',kind:'done'});
- else if(a==='again')backToLobby()});
+ else if(a==='again')backToLobby();
+ if(['pick','vote','yes','no'].includes(a)&&b.closest('#decide')){const k=decideKey;setTimeout(()=>{if(decideKey===k&&!$('decide').hidden)closeDecide()},1100)}});
 $('chatform').addEventListener('submit',e=>{e.preventDefault();if(sendChat($('chatin').value))$('chatin').value=''});
 $('btnCreate').addEventListener('click',()=>createRoom());
 $('joinForm').addEventListener('submit',e=>{e.preventDefault();joinRoom($('codeIn').value)});

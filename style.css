@@ -61,7 +61,7 @@ button.sel{background:var(--brass);color:var(--on-brass);border-color:var(--bras
 .bar{height:4px;background:#0006;border-radius:4px;overflow:hidden;margin-top:4px}
 .bar i{display:block;height:100%;background:var(--brass);width:0;transition:width .5s linear}
 .seatpn{padding:10px;flex:none}
-.seats{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;max-height:190px;overflow:auto;scrollbar-width:thin}
+.seats{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px;max-height:190px;overflow:auto;scrollbar-width:thin}
 .seat{border:1px solid var(--line);border-radius:12px;padding:5px 7px;background:#0000002e;display:flex;align-items:center;gap:8px;min-width:0;position:relative}
 .seat.me{border-color:var(--brass)}
 .seat.dead{opacity:.62}
@@ -71,7 +71,8 @@ button.sel{background:var(--brass);color:var(--on-brass);border-color:var(--bras
 .av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:15px;color:#150e0b;background:var(--c,var(--brass));box-shadow:0 0 0 2px var(--wood),0 0 0 3px var(--line);flex:none}
 .av .ic{font-size:20px}
 .seat.dead .av{filter:grayscale(1) brightness(.7)}
-.nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;line-height:1.2}
+.nm{font-weight:700;white-space:normal;overflow-wrap:anywhere;word-break:keep-all;font-size:13.5px;line-height:1.2}
+.nm.long{font-size:12px}
 .tag{font-size:11.5px;color:var(--dim);display:flex;align-items:center;gap:3px;line-height:1.2;white-space:nowrap}
 .tag .ic{font-size:13px}
 .tag.ok{color:var(--green)}.tag.bad{color:var(--blood)}
@@ -105,7 +106,7 @@ form input{flex:1}
 .tgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:6px;margin-bottom:8px}
 .tgs button{display:flex;align-items:center;gap:6px;padding:5px 8px;min-width:0;text-align:left;font-size:13.5px}
 .tgs .av{width:22px;height:22px;font-size:11px;box-shadow:none}
-.tgs span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tgs span.t{white-space:normal;overflow-wrap:anywhere;line-height:1.2}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
 .chip{font-size:12px;border:1px solid var(--oxblood);color:var(--blood);border-radius:999px;padding:1px 10px}
 .chip.p{border-color:var(--line);color:var(--ink)}
@@ -138,7 +139,7 @@ dialog::backdrop{background:#000a}
  .stage{order:1;padding:8px 12px}.stage .big{font-size:30px}.stage h2{font-size:16px}.stage p{font-size:12.5px}.clock b{font-size:21px}.clock{min-width:62px}
  .seatpn{order:2;padding:6px}
  .seats{display:flex;overflow-x:auto;overflow-y:hidden;max-height:none;gap:6px}
- .seat{flex:none;width:112px}
+ .seat{flex:none;width:max-content;min-width:104px;max-width:170px}
  #chatpn{order:3}
  #me{order:4;max-height:40dvh}
  #side2{display:none}
@@ -181,3 +182,47 @@ dialog::backdrop{background:#000a}
 @keyframes shake{10%,90%{transform:translate3d(-2px,0,0)}20%,80%{transform:translate3d(4px,0,0)}30%,50%,70%{transform:translate3d(-8px,0,0)}40%,60%{transform:translate3d(8px,0,0)}}
 @keyframes seatDie{0%{transform:scale(1.12);box-shadow:0 0 0 2px var(--blood),0 0 24px #d0566a}100%{transform:none;box-shadow:none}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
+
+/* ---- 투표/밤 행동 시작 연출 ---- */
+#fx.ballot .veil{background:radial-gradient(circle at 50% 45%,#2a1d06c0,#050301f0 76%);box-shadow:inset 0 0 140px 20px #c9a45c55}
+#fx.ballot{--fc:#f0d9a0}
+#fx.act .veil{background:radial-gradient(circle at 50% 45%,#0e1a3acc,#02040cf2 76%);box-shadow:inset 0 0 160px 30px #5a6fb888}
+#fx.act{--fc:#9db4ff}
+#fx.ballot .fxcard,#fx.act .fxcard{animation:slamIn .55s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes slamIn{from{opacity:0;transform:scale(1.7)}to{opacity:1;transform:none}}
+
+/* ---- 행동 선택창: 화면 한가운데 ---- */
+#decide{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#000000a8;padding:14px;backdrop-filter:blur(3px)}
+#decide[hidden]{display:none}
+#decide .dcard{width:min(560px,100%);max-height:90dvh;overflow:auto;background:linear-gradient(180deg,var(--wood2),var(--wood));border:1px solid var(--brass);border-radius:20px;padding:20px 20px 16px;box-shadow:0 0 0 1px #000,0 24px 80px #000d,0 0 60px var(--dglow,#c9a45c44);animation:dIn .5s cubic-bezier(.2,1.2,.4,1) both;position:relative}
+#decide.again .dcard{animation:none}
+#decide .dhead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+#decide .dhead .ic{font-size:44px;color:var(--rc,var(--brass));filter:drop-shadow(0 0 10px var(--rc,var(--brass)))}
+#decide h2{font-size:clamp(19px,4.6vw,24px);margin:0;color:var(--ink)}
+#decide .dsub{margin:2px 0 0;color:var(--dim);font-size:13.5px}
+#decide .dclock{height:5px;background:#0007;border-radius:5px;overflow:hidden;margin:6px 0 12px}
+#decide .dclock i{display:block;height:100%;background:var(--rc,var(--brass));width:100%;transition:width .5s linear}
+#decide .tgs{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+#decide .tgs button{padding:10px 10px;font-size:15px}
+#decide .tgs .av{width:28px;height:28px;font-size:13px}
+#decide .tgs button.sel{transform:scale(1.03);box-shadow:0 0 0 2px #fff3,0 0 18px var(--brass)}
+#decide .dfoot{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:4px}
+#decide .dfoot button{flex:0 0 auto}
+#decide .done{color:var(--green);font-weight:700;text-align:center;margin:0 0 8px;min-height:1.4em}
+#decide .big2{padding:16px 10px;font-size:18px;font-weight:800}
+@keyframes dIn{from{opacity:0;transform:translateY(30px) scale(.9)}to{opacity:1;transform:none}}
+/* 행동이 필요한데 창을 닫은 상태: 오른쪽 패널이 반짝인다 */
+#me.need{animation:needPulse 1.4s ease-in-out infinite;border-color:var(--brass)}
+@keyframes needPulse{0%,100%{box-shadow:0 12px 30px #0009,0 0 0 0 #c9a45c00}50%{box-shadow:0 12px 30px #0009,0 0 0 4px #c9a45c88,0 0 26px #c9a45c66}}
+
+/* ---- 심심풀이 반딧불 장난감 ---- */
+#toyc{position:fixed;inset:0;width:100%;height:100%;z-index:45;pointer-events:none}
+.tools .toy{position:relative;gap:5px;color:var(--brass)}
+.tools .toy .ic{font-size:17px;transition:transform .15s}
+.tools .toy:active .ic{transform:scale(.7) rotate(25deg)}
+.tools .toy b{font-family:var(--latin);font-size:12px;min-width:1.2em;text-align:left;font-variant-numeric:tabular-nums}
+.tools .toy.hot{box-shadow:0 0 0 1px var(--brass),0 0 16px #c9a45c99}
+.tools .toy .cb{position:absolute;left:50%;top:100%;transform:translateX(-50%);font-size:11px;color:#fff3d0;background:#000a;border-radius:8px;padding:0 6px;pointer-events:none;opacity:0;transition:opacity .2s;white-space:nowrap}
+.tools .toy.hot .cb{opacity:1}
+#decide .dx{position:absolute;top:8px;right:8px;width:30px;height:30px;padding:0;border-radius:50%;line-height:1;font-size:13px;background:#0006}
+#decide .dhead{padding-right:30px}

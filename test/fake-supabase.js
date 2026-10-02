@@ -10,6 +10,7 @@
   const q={cols:null,f:[],ord:null,lim:null,single:false,maybe:false,op:'select',rows:null};
   const run=()=>{
    if(q.op==='upsert'){const r=q.rows;const had=tables.kv.has(r.path);tables.kv.set(r.path,{...r});emit('kv',had?'UPDATE':'INSERT',{...r});return{data:null,error:null}}
+   if(q.op==='insert'&&table==='kv'){const r=q.rows[0];if(tables.kv.has(r.path))return{data:null,error:{code:'23505',message:'duplicate'}};tables.kv.set(r.path,{...r});emit('kv','INSERT',{...r});return{data:null,error:null}}
    if(q.op==='insert'){
     const out=q.rows.map(r=>{const row={id:chatId++,...r};tables.chat.push(row);emit('chat','INSERT',row);return row});
     return{data:q.single?out[0]:out,error:null}}

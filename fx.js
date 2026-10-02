@@ -4,7 +4,7 @@ const REDUCED=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').
 function fxPush(o){fxQ.push(o);if(fxQ.length>5)fxQ=fxQ.slice(-4);if(!fxBusy)fxNext()}
 function fxNext(){
  const o=fxQ.shift(),el=document.getElementById('fx');
- if(!o){fxBusy=false;return}
+ if(!o){fxBusy=false;if(typeof render==='function')render();return}
  fxBusy=true;
  el.className='';void el.offsetWidth;el.className='on '+o.kind;
  if(o.rc)el.style.setProperty('--rc',o.rc);
@@ -62,17 +62,28 @@ function fxOnState(prev,cur){
   const e=logs.find(x=>x.k==='death');
   if(e)fxPush({kind:'death',icon:'i-skull',title:`${nm(e.id)} 님이 살해당했습니다`,sub:'마피아의 습격이 있었어요',camp:`${e.camp}이었습니다`,ms:3600,shake:true,snd:['death']});
   else if(logs.find(x=>x.k==='peace'))fxPush({kind:'spare',icon:'i-cup',title:'평화로운 밤이었습니다',sub:'아무도 죽지 않았어요',ms:2400,snd:['spare']})}
+ if(cur.phase==='vote'&&prev.phase!=='vote'&&ctx().inGame&&!ctx().dead)
+  fxPush({kind:'ballot',icon:'i-ballot',title:'투표 시간',sub:'처형할 사람을 골라 주세요',ms:1900,snd:['bell','click']});
+ if(cur.phase==='judge'&&prev.phase!=='judge'&&ctx().inGame&&!ctx().dead&&cur.accused!==uid)
+  fxPush({kind:'ballot',icon:'i-gavel',title:'찬반 투표',sub:`${esc(nm(cur.accused))} 님을 처형할까요?`,ms:1900,snd:['bell','click']});
  if(cur.phase==='defense'&&prev.phase!=='defense'){
   fxPush({kind:'spot',icon:'i-speech',title:`${nm(cur.accused)} 님이 지목되었습니다`,sub:'과반수 득표 · 최후 발언을 시작합니다',ms:2400,snd:['spot']})}
  logs.filter(x=>x.k==='verdict').forEach(e=>{
   if(e.exec)fxPush({kind:'exec',icon:'i-gavel',title:`${nm(e.id)} 님이 처형되었습니다`,sub:`찬성 ${e.y} · 반대 ${e.no}`,camp:`${e.camp}이었습니다`,ms:3600,shake:true,snd:['gavel','death']});
   else fxPush({kind:'spare',icon:'i-cup',title:`${nm(e.id)} 님이 살아남았습니다`,sub:`찬성 ${e.y} · 반대 ${e.no}`,ms:2600,snd:['spare']})});
  if(cur.phase==='night'&&prev.phase!=='night'){
-  fxPush({kind:'night',icon:'i-moon',title:'밤이 되었습니다',sub:`${cur.day}일차 · 도시가 잠들고 마피아가 깨어납니다`,ms:2400,snd:['night']})}
+  fxPush({kind:'night',icon:'i-moon',title:'밤이 되었습니다',sub:`${cur.day}일차 · 도시가 잠들고 마피아가 깨어납니다`,ms:2400,snd:['night']});
+ fxActCard()}
  if(cur.phase==='over'&&prev.phase!=='over'){
   const c=ctx(),mafiaWin=cur.winner==='mafia',mine=c.myRole==='mafia';
   const won=!c.inGame?true:(mafiaWin===mine);
   fxPush({kind:won?'win':'lose',icon:won?'i-cup':'i-skull',title:mafiaWin?'마피아의 승리':'시민의 승리',sub:c.inGame?(won?'당신의 팀이 이겼습니다':'당신의 팀이 패배했습니다'):'게임이 끝났습니다',ms:4200,snd:[won?'win':'lose']})}}
+
+/* 밤 행동 안내 카드: 마피아, 의사, 경찰에게만 */
+function fxActCard(){
+ const c=ctx();if(!c.inGame||c.dead||!c.myRole||c.myRole==='citizen')return;
+ const t={mafia:['i-mafia','마피아의 시간','오늘 밤 노릴 사람을 고르세요'],doctor:['i-doctor','의사의 시간','오늘 밤 살릴 사람을 고르세요'],police:['i-police','경찰의 시간','오늘 밤 조사할 사람을 고르세요']}[c.myRole];
+ fxPush({kind:'act',icon:t[0],title:t[1],sub:t[2],ms:2000,snd:['spot']})}
 
 /* 직업 공개 카드: 직업 정보가 도착하면 한 번 보여 준다 */
 function fxTryRole(){
@@ -81,4 +92,5 @@ function fxTryRole(){
  pendingRole=null;const rm=ROLE[c.myRole];
  const mates=c.myRole==='mafia'?S.order.filter(id=>R.roles[id]==='mafia'&&id!==uid).map(nm):[];
  fxPush({kind:'role',icon:rm.ic,rc:rm.c,title:`당신은 ${rm.n}입니다`,sub:esc(rm.d)+(mates.length?`<br>동료: ${mates.map(esc).join(', ')}`:''),camp:rm.team,ms:4200,snd:['reveal']});
- fxPush({kind:'night',icon:'i-moon',title:'첫 번째 밤이 되었습니다',sub:'도시가 잠들고 마피아가 깨어납니다',ms:2200,snd:['night']})}
+ fxPush({kind:'night',icon:'i-moon',title:'첫 번째 밤이 되었습니다',sub:'도시가 잠들고 마피아가 깨어납니다',ms:2200,snd:['night']});
+ fxActCard()}

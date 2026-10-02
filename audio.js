@@ -73,6 +73,9 @@ const Snd=(()=>{
   mode(m,o){if(o)outcome=o;if(m===mode)return;mode=m;beat=0;if(ac)nextT=ac.currentTime+.2},
   toggle(){on=!on;if(!ac){if(on)ensure();return on}master.gain.setTargetAtTime(on?vol:0,ac.currentTime,.15);if(on)ensure();return on},
   isOn:()=>on,
+  /* 장난감 소리: 펜타토닉 음계라 아무렇게나 눌러도 듣기 좋다 */
+  plink(i,big){if(!ac||!on)return;const t=ac.currentTime+.005,m=PENT[((i%6)+6)%6]+(Math.floor(i/6)%2?12:0);
+   note(hz(m),t,big?1.6:.9,{type:'triangle',v:big?.09:.06,a:.003,wet:.6});if(big)[0,4,7].forEach((d,k)=>note(hz(m-12+d),t+k*.05,1.8,{type:'sine',v:.05,a:.01,wet:.7}))},
   volume(v){vol=v;if(ac&&on)master.gain.setTargetAtTime(v,ac.currentTime,.1)},
   /* 효과음 */
   sfx(name){

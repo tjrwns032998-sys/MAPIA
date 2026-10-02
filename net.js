@@ -2,7 +2,7 @@
 const CFG=window.MAFIA_CONFIG||{};
 let sb=null,db=null,uid=null,room=null,chatCh=null,presCh=null,authErr='';
 let S=null,R=null,SEC=null,PL={},ACT={},BOTS=[],CHAT=[],online=null,mode='init',chatKey=null,roomErr='';
-let seenGid=null,isEng=false,lastAcq=0,eBusy=false,lastSeq=-1,chain=Promise.resolve();
+let seenGid=null,isEng=false,engUntil=0,starting=false,claimN=0,claimSeq=-1,lastAcq=0,eBusy=false,lastSeq=-1,chain=Promise.resolve();
 const botMem={};
 const isOn=id=>id===uid||online===null||online.has(id);
 const phase=()=>S?S.phase:'lobby';
@@ -38,6 +38,9 @@ function makeDb(sb,room){
    async get(){return sd(p)},
    async set(d){const r=await sb.from('kv').upsert({path:abs(p),room,data:d,updated_at:new Date().toISOString()});if(r.error)throw r.error;apply(p,d)},
    async update(d){return ref.set(deepMerge(KV.get(p)||{},d))},
+   /* 이미 있으면 실패하는 쓰기. 여러 명이 동시에 시도해도 딱 한 명만 true 를 받는다. */
+   async create(d){const r=await sb.from('kv').insert({path:abs(p),room,data:d,updated_at:new Date().toISOString()});
+    if(r.error){if(r.error.code==='23505')return false;throw r.error}apply(p,d);return true},
    async acquire(o){const r=await sb.rpc('acquire_lease',{p_path:abs(p),p_ttl:o.ttlMs});if(r.error)throw r.error;return{acquired:!!r.data}},
    onSnapshot(fn){if(!DL.has(p))DL.set(p,[]);DL.get(p).push(fn);if(loaded)fn(sd(p));return()=>{DL.set(p,(DL.get(p)||[]).filter(f=>f!==fn))}}};return ref},
   collection(pre){return{onSnapshot(fn){const c={pre,fn};CL.push(c);if(loaded)fn(sc(pre));return()=>{const i=CL.indexOf(c);if(i>=0)CL.splice(i,1)}}}}}}
@@ -58,7 +61,7 @@ const CODE_RE=/^[A-Z2-9]{4,6}$/;
 function roomFromHash(){const c=decodeURIComponent((location.hash||'').slice(1)).toUpperCase();return CODE_RE.test(c)?c:''}
 function newCode(){const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<5;i++)c+=a[Math.floor(Math.random()*a.length)];return c}
 function resetRoomState(){
- S=null;R=null;SEC=null;PL={};ACT={};BOTS=[];CHAT=[];online=null;chatKey=null;seenGid=null;isEng=false;lastSeq=-1;eBusy=false;
+ S=null;R=null;SEC=null;PL={};ACT={};BOTS=[];CHAT=[];online=null;chatKey=null;seenGid=null;isEng=false;engUntil=0;starting=false;lastSeq=-1;eBusy=false;
  Object.keys(botMem).forEach(k=>delete botMem[k])}
 async function joinRoom(code,create){
  code=String(code||'').trim().toUpperCase();roomErr='';
@@ -90,7 +93,9 @@ addEventListener('hashchange',()=>{const c=roomFromHash();if(mode!=='init'&&mode
 function subscribe(){
  const er=()=>{};
  db.collection('players').onSnapshot(sn=>{PL={};sn.docs.forEach(d=>{PL[d.id]=d.data()});render()},er);
- db.doc('game/state').onSnapshot(sn=>{const prev=S;S=sn.exists?sn.data():null;onState(prev);render()},er);
+ db.doc('game/state').onSnapshot(sn=>{const prev=S,nx=sn.exists?sn.data():null;
+  if(prev&&nx&&nx.gid===prev.gid&&nx.seq<prev.seq)return; /* 늦게 도착한 옛 상태는 무시 */
+  S=nx;onState(prev);render()},er);
  db.doc('game/roles').onSnapshot(sn=>{R=sn.exists?sn.data():null;render()},er);
  db.doc('game/secret').onSnapshot(sn=>{SEC=sn.exists?sn.data():null;render()},er);
  db.collection('actions').onSnapshot(sn=>{ACT={};sn.docs.forEach(d=>{ACT[d.id]=d.data()});render()},er);
@@ -154,16 +159,23 @@ function setAct(o){if(!S||!uid||!db)return;const gid=S.gid,n=S.day;w(()=>db.doc(
 
 /* ---------- 시작 / 종료 / AI ---------- */
 function startGame(){
- if(mode!=='play'||phase()!=='lobby')return;
+ if(mode!=='play'||phase()!=='lobby'||starting)return;
  const hs=lobbyHumans(),ids=[...hs,...BOTS.map(b=>b.id)];
  if(ids.length<MIN||ids.length>MAX||!hs.every(id=>PL[id]&&PL[id].ready))return;
- const roles=dealRoles(ids,Math.random),order=shuffle(ids,Math.random),gid='g'+Date.now(),d=dist(ids.length),bots={};
+ const roles=dealRoles(ids,Math.random),order=shuffle(ids,Math.random),gid='g'+Date.now()+Math.floor(Math.random()*1000),d=dist(ids.length),bots={};
  BOTS.forEach(b=>{bots[b.id]=b.name});
- const seq=(S&&S.seq||0)+1,now=Date.now();
+ const seq=(S&&S.seq||0)+1,now=Date.now();starting=true;
+ /* 여러 명이 동시에 시작을 눌러도 이번 차례(seq)의 시작권은 한 명만 얻는다. 못 얻은 사람은 아무것도 쓰지 않는다. */
  w(async()=>{
-  await db.doc('game/roles').set({gid,roles});
-  await db.doc('game/secret').set({gid,inv:{}});
-  await db.doc('game/state').set({seq,gid,phase:'night',day:1,endsAt:now+NIGHT_MS,dur:NIGHT_MS,order,bots,dead:[],accused:null,winner:null,log:[{n:0,k:'start',m:d.mafia,c:d.citizen}]})})}
+  try{
+   if(claimSeq!==seq){claimSeq=seq;claimN=0}
+   const won=await db.doc('game/start_'+seq+(claimN?'_'+claimN:'')).create({by:uid,gid,t:now});
+   if(!won){ /* 다른 사람이 시작 중. 5초 안에 게임이 안 열리면 다음 시도는 새 시작권을 쓴다. */
+    setTimeout(()=>{if(phase()==='lobby'&&(S&&S.seq||0)+1===seq)claimN++},5000);return}
+   await db.doc('game/roles').set({gid,roles});
+   await db.doc('game/secret').set({gid,inv:{}});
+   await db.doc('game/state').set({seq,gid,phase:'night',day:1,endsAt:now+NIGHT_MS,dur:NIGHT_MS,order,bots,dead:[],accused:null,winner:null,log:[{n:0,k:'start',m:d.mafia,c:d.citizen}]})
+  }finally{starting=false}})}
 function backToLobby(){
  if(mode!=='play')return;const seq=(S&&S.seq||0)+1;
  w(()=>db.doc('game/state').set({seq,gid:S?S.gid:'',phase:'lobby',day:0,endsAt:0,dur:0,order:[],bots:{},dead:[],accused:null,winner:null,log:[]}))}
@@ -203,5 +215,5 @@ async function runBots(){
 setInterval(async()=>{
  if(!db||!uid||mode!=='play'||!S||S.phase==='lobby'||S.phase==='over'){isEng=false;return}
  const now=Date.now();
- if(now-lastAcq>3500){lastAcq=now;try{const r=await db.doc('game/engine').acquire({holder:uid,ttlMs:12000});isEng=!!r.acquired}catch(e){isEng=false}}
- if(isEng){runEngine();w(runBots)}},1000);
+ if(now-lastAcq>3500){lastAcq=now;try{const r=await db.doc('game/engine').acquire({holder:uid,ttlMs:12000});isEng=!!r.acquired;engUntil=isEng?now+8000:0}catch(e){isEng=false}}
+ if(isEng&&Date.now()<engUntil){runEngine();w(runBots)}},1000);

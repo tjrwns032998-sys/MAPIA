@@ -3,8 +3,8 @@ const E=require('../engine.js');Object.assign(globalThis,E); // 브라우저에�
 const B=require('../bots.js');
 let seed=11;const rnd=()=>{seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296};
 let bad=0,res={mafia:0,citizen:0},maxTicks=0,msgs=0,maxLen=0,kinds={fakePolice:0,agitate:0,counter:0,frame:0,final:0,ghost:0,mafiaCh:0},sizes={};
-const fp=new RegExp(B.T.fakePolice.map(t=>t.split('{t}')[0].slice(0,8)).join('|'));
-for(let g=0;g<600;g++){
+const fp=new RegExp(Object.values(B.L.fakePolice).flat().map(t=>t.split('{t}')[0].slice(0,8)).join('|'));
+for(let g=0;g<(+process.env.GAMES||600);g++){
  const n=E.MIN+Math.floor(rnd()*(E.MAX-E.MIN+1)),ids=[...Array(n)].map((_,i)=>'bot_'+i),bots={},names={};
  ids.forEach((i,k)=>{if(k>0)bots[i]='봇'+k;names[i]='봇'+k});
  const roles=E.dealRoles(ids,rnd),d=E.dist(n),cnt={};
@@ -26,9 +26,9 @@ for(let g=0;g<600;g++){
    if(m.ch==='dead'){kinds.ghost++;if(!s.dead.includes(m.uid))bad++}
    if(m.ch==='day'&&s.dead.includes(m.uid)&&s.phase!=='over'&&!(s.phase==='judge'))bad++;
    if(fp.test(m.text)&&roles[m.uid]==='mafia')kinds.fakePolice++;
-   if(/경찰입니다|경찰 조사 결과|경찰인 제가/.test(m.text)&&roles[m.uid]==='police')kinds.agitate++;
-   if(/진짜 경찰|가짜 경찰/.test(m.text)&&roles[m.uid]==='mafia')kinds.counter++;
-   chat.push({id:cid++,uid:m.uid,ch:m.ch,text:m.text,t:now})})
+   if(/경찰입니다|경찰 조사 결과|경찰인 제가|내가 경찰이야|경찰 조사 결과야|경찰인 내가/.test(m.text)&&roles[m.uid]==='police')kinds.agitate++;
+   if(/진짜 경찰|가짜 경찰|가짜야/.test(m.text)&&roles[m.uid]==='mafia')kinds.counter++;
+   chat.push({id:cid++,uid:m.uid,ch:m.ch,text:m.text,t:now});if(chat.length>150)chat.shift()})
  }
  maxTicks=Math.max(maxTicks,ticks);
  if(s.phase!=='over'){bad++;console.log('no end',n)}else{res[s.winner]++;if(E.winnerOf(s,roles,s.dead)!==s.winner)bad++}
